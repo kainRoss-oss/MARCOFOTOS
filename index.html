@@ -189,8 +189,8 @@
     <h2>Marco gráfico (opcional)</h2>
     <div class="btn-group" id="frame-options">
       <div class="btn-option selected" data-frame="">Sin marco</div>
-      <div class="btn-option" data-frame="MARCOTRICOLOR.png">Marco 1</div>
-      <div class="btn-option" data-frame="MARCO2.png">Marco 2</div>
+      <div class="btn-option" data-top="MARCO1Superior.png" data-bottom="MARCO1Inferior.png">Marco 1</div>
+      <div class="btn-option" data-top="Marco2Superior.png" data-bottom="Marco2Inferior.png">Marco 2</div>
     </div>
     <div id="frame-status"></div>
   </div>
@@ -258,7 +258,8 @@
   const PREVIEW_SCALE = 10;
   let photos = [];
   let stream = null;
-  let frameImageDataUrl = null; // marco grafico opcional, se repite en cada foto
+  let frameTopDataUrl = null;
+  let frameBottomDataUrl = null;
   let lastPdfBlob = null;
   let lastPdfFilename = 'marcofotos.pdf';
 
@@ -468,31 +469,43 @@
   });
 
   /* ---------- PANTALLA 3: PDF ---------- */
+  function fetchAsDataUrl(fileName) {
+    return fetch(fileName)
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
+      .then(blob => new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.readAsDataURL(blob);
+      }));
+  }
+
   document.querySelectorAll('#frame-options .btn-option').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('#frame-options .btn-option').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
-      const fileName = btn.dataset.frame;
-      if (!fileName) {
-        frameImageDataUrl = null;
+      const topFile = btn.dataset.top;
+      const bottomFile = btn.dataset.bottom;
+
+      if (!topFile && !bottomFile) {
+        frameTopDataUrl = null;
+        frameBottomDataUrl = null;
         document.getElementById('frame-status').textContent = '';
         return;
       }
+
       document.getElementById('frame-status').textContent = 'Cargando ' + btn.textContent + '...';
-      fetch(fileName)
-        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
-        .then(blob => {
-          const reader = new FileReader();
-          reader.onload = () => {
-            frameImageDataUrl = reader.result;
-            document.getElementById('frame-status').textContent = btn.textContent + ' listo ✓';
-          };
-          reader.readAsDataURL(blob);
-        })
-        .catch(() => {
-          frameImageDataUrl = null;
-          document.getElementById('frame-status').textContent = 'No se pudo cargar ' + fileName + '. Verifica que el archivo esté en la raíz del repo, junto a index.html.';
-        });
+      const topP = topFile ? fetchAsDataUrl(topFile).catch(() => null) : Promise.resolve(null);
+      const bottomP = bottomFile ? fetchAsDataUrl(bottomFile).catch(() => null) : Promise.resolve(null);
+
+      Promise.all([topP, bottomP]).then(([topUrl, bottomUrl]) => {
+        frameTopDataUrl = topUrl;
+        frameBottomDataUrl = bottomUrl;
+        if (!topUrl && !bottomUrl) {
+          document.getElementById('frame-status').textContent = 'No se pudo cargar ' + btn.textContent + '. Verifica los nombres de archivo en el repo.';
+        } else {
+          document.getElementById('frame-status').textContent = btn.textContent + ' listo ✓';
+        }
+      });
     });
   });
 
@@ -523,10 +536,11 @@
       });
     }
 
-    const framePromise = frameImageDataUrl ? loadImg(frameImageDataUrl) : Promise.resolve(null);
+    const topPromise = frameTopDataUrl ? loadImg(frameTopDataUrl) : Promise.resolve(null);
+    const bottomPromise = frameBottomDataUrl ? loadImg(frameBottomDataUrl) : Promise.resolve(null);
     const photoPromises = photos.map(p => p ? loadImg(p) : Promise.resolve(null));
 
-    Promise.all([framePromise, Promise.all(photoPromises)]).then(([frameImg, photoImgs]) => {
+    Promise.all([topPromise, bottomPromise, Promise.all(photoPromises)]).then(([topImg, bottomImg, photoImgs]) => {
       photoImgs.forEach((img, i) => {
         if (!img) return;
         const col = i % state.cols;
@@ -537,7 +551,17 @@
         const h = state.photoH * scale;
 
         ctx.drawImage(img, x, y, w, h);
-        if (frameImg) ctx.drawImage(frameImg, x, y, w, h);
+
+        // franja superior: se escala solo por ancho (mantiene su proporcion), pegada al borde de arriba
+        if (topImg) {
+          const th = w * (topImg.naturalHeight / topImg.naturalWidth);
+          ctx.drawImage(topImg, x, y, w, th);
+        }
+        // franja inferior: igual, pegada al borde de abajo
+        if (bottomImg) {
+          const bh = w * (bottomImg.naturalHeight / bottomImg.naturalWidth);
+          ctx.drawImage(bottomImg, x, y + h - bh, w, bh);
+        }
 
         ctx.save();
         ctx.strokeStyle = '#999';
@@ -549,7 +573,16 @@
     });
   }
 
-  function buildPdf() {
+  function getImgDims(dataUrl) {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+      img.onerror = () => resolve(null);
+      img.src = dataUrl;
+    });
+  }
+
+  async function buildPdf() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({
       orientation: state.sheetW > state.sheetH ? 'landscape' : 'portrait',
@@ -564,15 +597,25 @@
     const offsetX = state.margin + (usableW - gridW) / 2;
     const offsetY = state.margin + (usableH - gridH) / 2;
 
+    const topDims = frameTopDataUrl ? await getImgDims(frameTopDataUrl) : null;
+    const bottomDims = frameBottomDataUrl ? await getImgDims(frameBottomDataUrl) : null;
+
     photos.forEach((p, i) => {
       const col = i % state.cols;
       const row = Math.floor(i / state.cols);
       const x = offsetX + col * state.photoW;
       const y = offsetY + row * state.photoH;
       doc.addImage(p, 'JPEG', x, y, state.photoW, state.photoH);
-      if (frameImageDataUrl) {
-        doc.addImage(frameImageDataUrl, 'PNG', x, y, state.photoW, state.photoH);
+
+      if (frameTopDataUrl && topDims) {
+        const th = state.photoW * (topDims.h / topDims.w);
+        doc.addImage(frameTopDataUrl, 'PNG', x, y, state.photoW, th);
       }
+      if (frameBottomDataUrl && bottomDims) {
+        const bh = state.photoW * (bottomDims.h / bottomDims.w);
+        doc.addImage(frameBottomDataUrl, 'PNG', x, y + state.photoH - bh, state.photoW, bh);
+      }
+
       // linea de corte punteada
       doc.setDrawColor(150, 150, 150);
       doc.setLineDashPattern([0.1, 0.1], 0);
@@ -587,14 +630,14 @@
     return doc;
   }
 
-  document.getElementById('downloadBtn').addEventListener('click', () => {
-    const doc = buildPdf();
+  document.getElementById('downloadBtn').addEventListener('click', async () => {
+    const doc = await buildPdf();
     lastPdfFilename = 'marcofotos_' + Date.now() + '.pdf';
     doc.save(lastPdfFilename);
   });
 
   document.getElementById('shareBtn').addEventListener('click', async () => {
-    const doc = buildPdf();
+    const doc = await buildPdf();
     const blob = doc.output('blob');
     lastPdfFilename = 'marcofotos_' + Date.now() + '.pdf';
     const file = new File([blob], lastPdfFilename, { type: 'application/pdf' });
