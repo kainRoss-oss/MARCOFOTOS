@@ -187,6 +187,16 @@
   </div>
 
   <div class="card">
+    <h2>Marco gráfico (opcional)</h2>
+    <div class="btn-group" id="frame-options">
+      <div class="btn-option selected" data-frame="">Sin marco</div>
+      <div class="btn-option" data-frame="MARCOTRICOLOR.png">Marco 1</div>
+      <div class="btn-option" data-frame="MARCO2.png">Marco 2</div>
+    </div>
+    <div id="frame-status"></div>
+  </div>
+
+  <div class="card">
     <h2>Resultado</h2>
     <div id="result" class="result">Calculando...</div>
     <div id="warning-zero" class="warning" style="display:none;">
@@ -225,16 +235,6 @@
 <div class="screen" id="screen-pdf">
   <h1>Preview del PDF</h1>
   <p class="subtitle">Revisa el acomodo antes de descargar</p>
-
-  <div class="card">
-    <h2>Marco gráfico (opcional)</h2>
-    <div class="btn-group" id="frame-options">
-      <div class="btn-option selected" data-frame="">Sin marco</div>
-      <div class="btn-option" data-frame="MARCOTRICOLOR.png">Marco 1</div>
-      <div class="btn-option" data-frame="MARCO2.png">Marco 2</div>
-    </div>
-    <div id="frame-status"></div>
-  </div>
 
   <div class="card">
     <div id="pdf-preview-wrap"><canvas id="pdf-preview-canvas"></canvas></div>
@@ -477,24 +477,22 @@
       if (!fileName) {
         frameImageDataUrl = null;
         document.getElementById('frame-status').textContent = '';
-        drawPdfPreview();
         return;
       }
       document.getElementById('frame-status').textContent = 'Cargando ' + btn.textContent + '...';
-      // se carga desde el mismo repo (misma carpeta que index.html)
       fetch(fileName)
-        .then(r => r.blob())
+        .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
         .then(blob => {
           const reader = new FileReader();
           reader.onload = () => {
             frameImageDataUrl = reader.result;
-            document.getElementById('frame-status').textContent = btn.textContent + ' aplicado';
-            drawPdfPreview();
+            document.getElementById('frame-status').textContent = btn.textContent + ' listo ✓';
           };
           reader.readAsDataURL(blob);
         })
         .catch(() => {
-          document.getElementById('frame-status').textContent = 'No se pudo cargar ' + fileName + '. Verifica que el archivo esté en la raíz del repo.';
+          frameImageDataUrl = null;
+          document.getElementById('frame-status').textContent = 'No se pudo cargar ' + fileName + '. Verifica que el archivo esté en la raíz del repo, junto a index.html.';
         });
     });
   });
@@ -517,46 +515,39 @@
     const offsetX = state.margin + (usableW - gridW) / 2;
     const offsetY = state.margin + (usableH - gridH) / 2;
 
-    let frameImg = null;
-    if (frameImageDataUrl) {
-      frameImg = new Image();
-      frameImg.src = frameImageDataUrl;
+    function loadImg(src) {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = src;
+      });
     }
 
-    let loaded = 0;
-    const total = photos.length;
-    if (total === 0) { finishDraw(); return; }
+    const framePromise = frameImageDataUrl ? loadImg(frameImageDataUrl) : Promise.resolve(null);
+    const photoPromises = photos.map(p => p ? loadImg(p) : Promise.resolve(null));
 
-    photos.forEach((p, i) => {
-      const img = new Image();
-      img.onload = () => { drawOne(i, img); loaded++; if (loaded === total) finishDraw(); };
-      img.src = p;
+    Promise.all([framePromise, Promise.all(photoPromises)]).then(([frameImg, photoImgs]) => {
+      photoImgs.forEach((img, i) => {
+        if (!img) return;
+        const col = i % state.cols;
+        const row = Math.floor(i / state.cols);
+        const x = (offsetX + col * state.photoW) * scale;
+        const y = (offsetY + row * state.photoH) * scale;
+        const w = state.photoW * scale;
+        const h = state.photoH * scale;
+
+        ctx.drawImage(img, x, y, w, h);
+        if (frameImg) ctx.drawImage(frameImg, x, y, w, h);
+
+        ctx.save();
+        ctx.strokeStyle = '#999';
+        ctx.setLineDash([4, 3]);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, w, h);
+        ctx.restore();
+      });
     });
-
-    function drawOne(i, img) {
-      const col = i % state.cols;
-      const row = Math.floor(i / state.cols);
-      const x = (offsetX + col * state.photoW) * scale;
-      const y = (offsetY + row * state.photoH) * scale;
-      const w = state.photoW * scale;
-      const h = state.photoH * scale;
-      ctx.drawImage(img, x, y, w, h);
-      if (frameImg && frameImg.complete) ctx.drawImage(frameImg, x, y, w, h);
-
-      // linea de corte punteada alrededor de cada foto
-      ctx.save();
-      ctx.strokeStyle = '#999';
-      ctx.setLineDash([4, 3]);
-      ctx.lineWidth = 1;
-      ctx.strokeRect(x, y, w, h);
-      ctx.restore();
-    }
-
-    function finishDraw() {
-      if (frameImg && !frameImg.complete) {
-        frameImg.onload = () => { photos.forEach((p, i) => {}); drawPdfPreview(); };
-      }
-    }
   }
 
   function buildPdf() {
