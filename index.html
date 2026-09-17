@@ -15,6 +15,8 @@
   }
   h1 { font-size: 20px; margin-bottom: 4px; }
   p.subtitle { color: #5f5e5a; margin-top: 0; font-size: 14px; }
+  .screen { display: none; }
+  .screen.active { display: block; }
   .card {
     background: #fff;
     border-radius: 12px;
@@ -73,22 +75,9 @@
     color: #633806;
     margin-top: 8px;
   }
-  #preview-wrap {
-    display: flex;
-    justify-content: center;
-    margin-top: 12px;
-  }
-  #sheet-preview {
-    background: #fff;
-    border: 1px solid #b4b2a9;
-    position: relative;
-  }
-  .cell {
-    position: absolute;
-    background: #cecbf6;
-    border: 1px solid #7f77dd;
-    border-radius: 2px;
-  }
+  #preview-wrap { display: flex; justify-content: center; margin-top: 12px; }
+  #sheet-preview { background: #fff; border: 1px solid #b4b2a9; position: relative; }
+  .cell { position: absolute; background: #cecbf6; border: 1px solid #7f77dd; border-radius: 2px; }
   button.primary {
     width: 100%;
     padding: 14px;
@@ -100,72 +89,146 @@
     font-weight: 600;
     cursor: pointer;
   }
-  button.primary:disabled {
-    background: #b4b2a9;
-    cursor: not-allowed;
+  button.primary:disabled { background: #b4b2a9; cursor: not-allowed; }
+  button.secondary {
+    width: 100%;
+    padding: 12px;
+    background: #fff;
+    color: #5f5e5a;
+    border: 1px solid #d3d1c7;
+    border-radius: 8px;
+    font-size: 14px;
+    margin-top: 8px;
+  }
+
+  /* ---- pantalla camara ---- */
+  #camera-wrap {
+    position: relative;
+    width: 100%;
+    background: #000;
+    border-radius: 12px;
+    overflow: hidden;
+    aspect-ratio: 3 / 4;
+  }
+  #video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  #overlay-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+  #shutter-wrap { display: flex; justify-content: center; margin: 16px 0; }
+  #shutter-btn {
+    width: 68px; height: 68px; border-radius: 50%;
+    background: #fff; border: 4px solid #0f6e56;
+    cursor: pointer;
+  }
+  #shutter-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #progress-text { text-align: center; font-size: 13px; color: #5f5e5a; margin-bottom: 8px; }
+  #thumbs {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+    gap: 8px;
+    margin: 12px 0;
+  }
+  .thumb-wrap { position: relative; }
+  .thumb-wrap img {
+    width: 100%; aspect-ratio: 1/1; object-fit: cover;
+    border-radius: 6px; border: 1px solid #d3d1c7; display: block;
+  }
+  .thumb-wrap.empty { aspect-ratio: 1/1; background: #ece9df; border: 1px dashed #b4b2a9; border-radius: 6px; }
+  .thumb-x {
+    position: absolute; top: -6px; right: -6px;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: #a32d2d; color: #fff; border: none;
+    font-size: 13px; line-height: 1; cursor: pointer;
   }
 </style>
 </head>
 <body>
 
-<h1>MARCOFOTOS</h1>
-<p class="subtitle">Paso 1: elige el tamaño de hoja y de foto</p>
+<!-- ===================== PANTALLA 1: CONFIGURACION ===================== -->
+<div class="screen active" id="screen-config">
+  <h1>MARCOFOTOS</h1>
+  <p class="subtitle">Paso 1: elige el tamaño de hoja y de foto</p>
 
-<div class="card">
-  <h2>Tamaño de hoja</h2>
-  <div class="btn-group">
-    <div class="btn-option selected" data-sheet="A4" data-w="21" data-h="29.7">A4 (21 x 29.7 cm)</div>
-    <div class="btn-option" data-sheet="Carta" data-w="21.59" data-h="27.94">Carta (21.59 x 27.94 cm)</div>
-  </div>
-</div>
-
-<div class="card">
-  <h2>Tamaño de foto (cm)</h2>
-  <div class="row">
-    <div>
-      <label for="photoW">Ancho</label>
-      <input type="number" id="photoW" value="5" min="1" step="0.1">
-    </div>
-    <div>
-      <label for="photoH">Alto</label>
-      <input type="number" id="photoH" value="5" min="1" step="0.1">
+  <div class="card">
+    <h2>Tamaño de hoja</h2>
+    <div class="btn-group">
+      <div class="btn-option selected" data-sheet="A4" data-w="21" data-h="29.7">A4 (21 x 29.7 cm)</div>
+      <div class="btn-option" data-sheet="Carta" data-w="21.59" data-h="27.94">Carta (21.59 x 27.94 cm)</div>
     </div>
   </div>
-  <label for="margin">Margen de impresión (cm, en cada borde)</label>
-  <input type="number" id="margin" value="0.5" min="0" step="0.1">
+
+  <div class="card">
+    <h2>Tamaño de foto (cm)</h2>
+    <div class="row">
+      <div>
+        <label for="photoW">Ancho</label>
+        <input type="number" id="photoW" value="5" min="1" step="0.1">
+      </div>
+      <div>
+        <label for="photoH">Alto</label>
+        <input type="number" id="photoH" value="5" min="1" step="0.1">
+      </div>
+    </div>
+    <label for="margin">Margen de impresión (cm, en cada borde)</label>
+    <input type="number" id="margin" value="0.5" min="0" step="0.1">
+  </div>
+
+  <div class="card">
+    <h2>Resultado</h2>
+    <div id="result" class="result">Calculando...</div>
+    <div id="warning-zero" class="warning" style="display:none;">
+      No cabe ninguna foto con esas medidas. Reduce el tamaño de foto o el margen.
+    </div>
+    <div id="preview-wrap"><div id="sheet-preview"></div></div>
+  </div>
+
+  <button class="primary" id="continueBtn" disabled>Continuar a la cámara</button>
 </div>
 
-<div class="card">
-  <h2>Resultado</h2>
-  <div id="result" class="result">Calculando...</div>
-  <div id="warning-zero" class="warning" style="display:none;">
-    No cabe ninguna foto con esas medidas. Reduce el tamaño de foto o el margen.
+<!-- ===================== PANTALLA 2: CAMARA ===================== -->
+<div class="screen" id="screen-camera">
+  <h1>Tomar fotos</h1>
+  <p class="subtitle" id="progress-text">0 de 0 marcos llenos</p>
+
+  <div id="camera-wrap">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="overlay-canvas"></canvas>
   </div>
-  <div id="preview-wrap">
-    <div id="sheet-preview"></div>
+
+  <div id="shutter-wrap">
+    <button id="shutter-btn"></button>
   </div>
+
+  <div class="card">
+    <h2>Fotos tomadas</h2>
+    <div id="thumbs"></div>
+  </div>
+
+  <button class="primary" id="toPdfBtn" disabled>Continuar al PDF</button>
+  <button class="secondary" id="backBtn">Volver a configuración</button>
 </div>
 
-<button class="primary" id="continueBtn" disabled>Continuar a la cámara</button>
+<canvas id="capture-canvas" style="display:none;"></canvas>
 
 <script>
   const state = {
-    sheetW: 21,
-    sheetH: 29.7,
-    photoW: 5,
-    photoH: 5,
-    margin: 0.5
+    sheetW: 21, sheetH: 29.7,
+    photoW: 5, photoH: 5,
+    margin: 0.5,
+    cols: 0, rows: 0, total: 0
   };
 
-  const PREVIEW_SCALE = 10; // px por cm en el preview
+  const PREVIEW_SCALE = 10;
+  let photos = []; // array de dataURL o null, tamaño = state.total
+  let stream = null;
 
+  /* ---------- PANTALLA 1: calculo ---------- */
   function calcular() {
     const usableW = state.sheetW - (state.margin * 2);
     const usableH = state.sheetH - (state.margin * 2);
-
     const cols = Math.floor(usableW / state.photoW);
     const rows = Math.floor(usableH / state.photoH);
     const total = Math.max(cols, 0) * Math.max(rows, 0);
+
+    state.cols = cols; state.rows = rows; state.total = total;
 
     const resultEl = document.getElementById('result');
     const warningEl = document.getElementById('warning-zero');
@@ -175,35 +238,27 @@
       resultEl.style.display = 'none';
       warningEl.style.display = 'block';
       continueBtn.disabled = true;
-      renderPreview(0, 0, usableW, usableH);
+      renderSheetPreview(0, 0, usableW, usableH);
       return;
     }
 
     resultEl.style.display = 'block';
     warningEl.style.display = 'none';
     continueBtn.disabled = false;
-
-    resultEl.innerHTML =
-      '<strong>' + total + ' foto(s)</strong> caben en la hoja<br>' +
-      cols + ' columna(s) x ' + rows + ' fila(s)';
-
-    renderPreview(cols, rows, usableW, usableH);
+    resultEl.innerHTML = '<strong>' + total + ' foto(s)</strong> caben en la hoja<br>' + cols + ' columna(s) x ' + rows + ' fila(s)';
+    renderSheetPreview(cols, rows, usableW, usableH);
   }
 
-  function renderPreview(cols, rows, usableW, usableH) {
+  function renderSheetPreview(cols, rows, usableW, usableH) {
     const sheet = document.getElementById('sheet-preview');
     sheet.innerHTML = '';
     sheet.style.width = (state.sheetW * PREVIEW_SCALE) + 'px';
     sheet.style.height = (state.sheetH * PREVIEW_SCALE) + 'px';
-
     if (cols <= 0 || rows <= 0) return;
-
-    // centrar la cuadricula dentro del area util
     const gridW = cols * state.photoW;
     const gridH = rows * state.photoH;
     const offsetX = state.margin + (usableW - gridW) / 2;
     const offsetY = state.margin + (usableH - gridH) / 2;
-
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const cell = document.createElement('div');
@@ -217,7 +272,6 @@
     }
   }
 
-  // selector de hoja
   document.querySelectorAll('.btn-option').forEach(btn => {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.btn-option').forEach(b => b.classList.remove('selected'));
@@ -227,25 +281,151 @@
       calcular();
     });
   });
-
-  // inputs
-  document.getElementById('photoW').addEventListener('input', e => {
-    state.photoW = parseFloat(e.target.value) || 0;
-    calcular();
-  });
-  document.getElementById('photoH').addEventListener('input', e => {
-    state.photoH = parseFloat(e.target.value) || 0;
-    calcular();
-  });
-  document.getElementById('margin').addEventListener('input', e => {
-    state.margin = parseFloat(e.target.value) || 0;
-    calcular();
-  });
+  document.getElementById('photoW').addEventListener('input', e => { state.photoW = parseFloat(e.target.value) || 0; calcular(); });
+  document.getElementById('photoH').addEventListener('input', e => { state.photoH = parseFloat(e.target.value) || 0; calcular(); });
+  document.getElementById('margin').addEventListener('input', e => { state.margin = parseFloat(e.target.value) || 0; calcular(); });
 
   document.getElementById('continueBtn').addEventListener('click', () => {
-    // Guardamos la configuracion para el siguiente paso (camara)
-    localStorage.setItem('marcofotos_config', JSON.stringify(state));
-    alert('Configuracion guardada. El siguiente paso (camara) se conecta aqui.');
+    photos = new Array(state.total).fill(null);
+    goToCamera();
+  });
+
+  /* ---------- PANTALLA 2: camara ---------- */
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  async function goToCamera() {
+    showScreen('screen-camera');
+    updateProgressText();
+    renderThumbs();
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false
+      });
+      document.getElementById('video').srcObject = stream;
+      drawOverlayLoop();
+    } catch (err) {
+      alert('No se pudo acceder a la cámara: ' + err.message + '\nRevisa que hayas dado permiso de cámara al sitio.');
+    }
+  }
+
+  function stopCamera() {
+    if (stream) {
+      stream.getTracks().forEach(t => t.stop());
+      stream = null;
+    }
+  }
+
+  document.getElementById('backBtn').addEventListener('click', () => {
+    stopCamera();
+    showScreen('screen-config');
+  });
+
+  // dibuja la cuadricula de marcos (blanco 50% opacidad) sobre el video
+  function drawOverlayLoop() {
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('overlay-canvas');
+    const ctx = canvas.getContext('2d');
+
+    function draw() {
+      if (!stream) return; // se detuvo la camara
+      const w = video.clientWidth;
+      const h = video.clientHeight;
+      if (canvas.width !== w) canvas.width = w;
+      if (canvas.height !== h) canvas.height = h;
+      ctx.clearRect(0, 0, w, h);
+
+      // proporcion del marco individual (ancho/alto en cm)
+      const cellAspect = state.photoW / state.photoH;
+      // marco centrado, ocupando la mayor parte del encuadre visible
+      const maxW = w * 0.9;
+      const maxH = h * 0.9;
+      let cellW = maxW;
+      let cellH = cellW / cellAspect;
+      if (cellH > maxH) {
+        cellH = maxH;
+        cellW = cellH * cellAspect;
+      }
+      const x = (w - cellW) / 2;
+      const y = (h - cellH) / 2;
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 2;
+      ctx.fillRect(x, y, cellW, cellH);
+      ctx.strokeRect(x, y, cellW, cellH);
+
+      requestAnimationFrame(draw);
+    }
+    draw();
+  }
+
+  function firstEmptyIndex() {
+    return photos.findIndex(p => p === null);
+  }
+
+  function updateProgressText() {
+    const filled = photos.filter(p => p !== null).length;
+    document.getElementById('progress-text').textContent = filled + ' de ' + state.total + ' marcos llenos';
+    document.getElementById('shutter-btn').disabled = filled >= state.total;
+    document.getElementById('toPdfBtn').disabled = filled < state.total;
+  }
+
+  document.getElementById('shutter-btn').addEventListener('click', () => {
+    const idx = firstEmptyIndex();
+    if (idx === -1) return;
+
+    const video = document.getElementById('video');
+    const cellAspect = state.photoW / state.photoH;
+
+    // recortamos el frame de video al mismo aspecto del marco (centrado)
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    let cropW = vw, cropH = vw / cellAspect;
+    if (cropH > vh) { cropH = vh; cropW = vh * cellAspect; }
+    const cropX = (vw - cropW) / 2;
+    const cropY = (vh - cropH) / 2;
+
+    const cap = document.getElementById('capture-canvas');
+    cap.width = cropW;
+    cap.height = cropH;
+    const ctx = cap.getContext('2d');
+    ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+    photos[idx] = cap.toDataURL('image/jpeg', 0.92);
+    updateProgressText();
+    renderThumbs();
+  });
+
+  function renderThumbs() {
+    const wrap = document.getElementById('thumbs');
+    wrap.innerHTML = '';
+    photos.forEach((p, i) => {
+      const div = document.createElement('div');
+      if (p) {
+        div.className = 'thumb-wrap';
+        div.innerHTML = '<img src="' + p + '"><button class="thumb-x" data-i="' + i + '">x</button>';
+      } else {
+        div.className = 'thumb-wrap empty';
+      }
+      wrap.appendChild(div);
+    });
+    wrap.querySelectorAll('.thumb-x').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const i = parseInt(btn.dataset.i, 10);
+        photos[i] = null;
+        updateProgressText();
+        renderThumbs();
+      });
+    });
+  }
+
+  document.getElementById('toPdfBtn').addEventListener('click', () => {
+    // Aqui se conecta la funcion 3 (generar PDF) en el siguiente paso
+    alert('Todas las fotos listas. El siguiente paso genera el PDF con estas ' + photos.length + ' fotos.');
   });
 
   calcular();
