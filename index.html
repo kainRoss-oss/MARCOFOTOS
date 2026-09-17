@@ -164,8 +164,7 @@
 
   <div class="card">
     <h2>Tamaño de hoja</h2>
-    <div class="btn-group">
-      <div class="btn-option selected" data-sheet="A4" data-w="21" data-h="29.7">A4 (21 x 29.7 cm)</div>
+    <div class="btn-group" id="sheet-options">
       <div class="btn-option" data-sheet="Carta" data-w="21.59" data-h="27.94">Carta (21.59 x 27.94 cm)</div>
     </div>
   </div>
@@ -315,9 +314,9 @@
     }
   }
 
-  document.querySelectorAll('.btn-option').forEach(btn => {
+  document.querySelectorAll('#sheet-options .btn-option').forEach(btn => {
     btn.addEventListener('click', () => {
-      document.querySelectorAll('.btn-option').forEach(b => b.classList.remove('selected'));
+      document.querySelectorAll('#sheet-options .btn-option').forEach(b => b.classList.remove('selected'));
       btn.classList.add('selected');
       state.sheetW = parseFloat(btn.dataset.w);
       state.sheetH = parseFloat(btn.dataset.h);
