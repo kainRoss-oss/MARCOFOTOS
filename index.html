@@ -228,8 +228,11 @@
 
   <div class="card">
     <h2>Marco gráfico (opcional)</h2>
-    <label class="file-input-btn" for="frameInput">Subir imagen de marco (PNG con transparencia)</label>
-    <input type="file" id="frameInput" accept="image/png" style="display:none;">
+    <div class="btn-group" id="frame-options">
+      <div class="btn-option selected" data-frame="">Sin marco</div>
+      <div class="btn-option" data-frame="MARCOTRICOLOR.png">Marco 1</div>
+      <div class="btn-option" data-frame="MARCO2.png">Marco 2</div>
+    </div>
     <div id="frame-status"></div>
   </div>
 
@@ -466,16 +469,34 @@
   });
 
   /* ---------- PANTALLA 3: PDF ---------- */
-  document.getElementById('frameInput').addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      frameImageDataUrl = reader.result;
-      document.getElementById('frame-status').textContent = 'Marco cargado: ' + file.name;
-      drawPdfPreview();
-    };
-    reader.readAsDataURL(file);
+  document.querySelectorAll('#frame-options .btn-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#frame-options .btn-option').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      const fileName = btn.dataset.frame;
+      if (!fileName) {
+        frameImageDataUrl = null;
+        document.getElementById('frame-status').textContent = '';
+        drawPdfPreview();
+        return;
+      }
+      document.getElementById('frame-status').textContent = 'Cargando ' + btn.textContent + '...';
+      // se carga desde el mismo repo (misma carpeta que index.html)
+      fetch(fileName)
+        .then(r => r.blob())
+        .then(blob => {
+          const reader = new FileReader();
+          reader.onload = () => {
+            frameImageDataUrl = reader.result;
+            document.getElementById('frame-status').textContent = btn.textContent + ' aplicado';
+            drawPdfPreview();
+          };
+          reader.readAsDataURL(blob);
+        })
+        .catch(() => {
+          document.getElementById('frame-status').textContent = 'No se pudo cargar ' + fileName + '. Verifica que el archivo esté en la raíz del repo.';
+        });
+    });
   });
 
   // dibuja un preview en canvas (a escala) que imita la hoja final
