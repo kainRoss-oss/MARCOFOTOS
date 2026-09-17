@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MARCOFOTOS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -138,6 +139,20 @@
     background: #a32d2d; color: #fff; border: none;
     font-size: 13px; line-height: 1; cursor: pointer;
   }
+
+  /* ---- pantalla pdf ---- */
+  #pdf-preview-wrap { display: flex; justify-content: center; margin-top: 8px; overflow-x: auto; }
+  #pdf-preview-canvas { background: #fff; border: 1px solid #b4b2a9; }
+  .file-input-btn {
+    display: block; width: 100%; padding: 12px; text-align: center;
+    border: 1px dashed #b4b2a9; border-radius: 8px; font-size: 13px;
+    color: #5f5e5a; cursor: pointer; margin-bottom: 8px;
+  }
+  #frame-status { font-size: 12px; color: #085041; margin-top: 4px; }
+  #print-note {
+    background: #faeeda; color: #633806; font-size: 12px;
+    padding: 10px; border-radius: 8px; margin-top: 12px;
+  }
 </style>
 </head>
 <body>
@@ -202,8 +217,30 @@
     <div id="thumbs"></div>
   </div>
 
-  <button class="primary" id="toPdfBtn" disabled>Continuar al PDF</button>
+  <button class="primary" id="toPdfScreenBtn" disabled>Continuar al PDF</button>
   <button class="secondary" id="backBtn">Volver a configuración</button>
+</div>
+
+<!-- ===================== PANTALLA 3: PDF ===================== -->
+<div class="screen" id="screen-pdf">
+  <h1>Preview del PDF</h1>
+  <p class="subtitle">Revisa el acomodo antes de descargar</p>
+
+  <div class="card">
+    <h2>Marco gráfico (opcional)</h2>
+    <label class="file-input-btn" for="frameInput">Subir imagen de marco (PNG con transparencia)</label>
+    <input type="file" id="frameInput" accept="image/png" style="display:none;">
+    <div id="frame-status"></div>
+  </div>
+
+  <div class="card">
+    <div id="pdf-preview-wrap"><canvas id="pdf-preview-canvas"></canvas></div>
+    <div id="print-note">Al imprimir, selecciona "Tamaño real / 100%" y NO "Ajustar a página", para que las medidas en cm sean exactas.</div>
+  </div>
+
+  <button class="primary" id="downloadBtn">Descargar PDF</button>
+  <button class="secondary" id="shareBtn">Compartir por WhatsApp</button>
+  <button class="secondary" id="backToCameraBtn">Volver a las fotos</button>
 </div>
 
 <canvas id="capture-canvas" style="display:none;"></canvas>
@@ -217,8 +254,11 @@
   };
 
   const PREVIEW_SCALE = 10;
-  let photos = []; // array de dataURL o null, tamaño = state.total
+  let photos = [];
   let stream = null;
+  let frameImageDataUrl = null; // marco grafico opcional, se repite en cada foto
+  let lastPdfBlob = null;
+  let lastPdfFilename = 'marcofotos.pdf';
 
   /* ---------- PANTALLA 1: calculo ---------- */
   function calcular() {
@@ -290,12 +330,13 @@
     goToCamera();
   });
 
-  /* ---------- PANTALLA 2: camara ---------- */
+  /* ---------- helpers de pantalla ---------- */
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
   }
 
+  /* ---------- PANTALLA 2: camara ---------- */
   async function goToCamera() {
     showScreen('screen-camera');
     updateProgressText();
@@ -324,31 +365,25 @@
     showScreen('screen-config');
   });
 
-  // dibuja la cuadricula de marcos (blanco 50% opacidad) sobre el video
   function drawOverlayLoop() {
     const video = document.getElementById('video');
     const canvas = document.getElementById('overlay-canvas');
     const ctx = canvas.getContext('2d');
 
     function draw() {
-      if (!stream) return; // se detuvo la camara
+      if (!stream) return;
       const w = video.clientWidth;
       const h = video.clientHeight;
       if (canvas.width !== w) canvas.width = w;
       if (canvas.height !== h) canvas.height = h;
       ctx.clearRect(0, 0, w, h);
 
-      // proporcion del marco individual (ancho/alto en cm)
       const cellAspect = state.photoW / state.photoH;
-      // marco centrado, ocupando la mayor parte del encuadre visible
       const maxW = w * 0.9;
       const maxH = h * 0.9;
       let cellW = maxW;
       let cellH = cellW / cellAspect;
-      if (cellH > maxH) {
-        cellH = maxH;
-        cellW = cellH * cellAspect;
-      }
+      if (cellH > maxH) { cellH = maxH; cellW = cellH * cellAspect; }
       const x = (w - cellW) / 2;
       const y = (h - cellH) / 2;
 
@@ -363,15 +398,13 @@
     draw();
   }
 
-  function firstEmptyIndex() {
-    return photos.findIndex(p => p === null);
-  }
+  function firstEmptyIndex() { return photos.findIndex(p => p === null); }
 
   function updateProgressText() {
     const filled = photos.filter(p => p !== null).length;
     document.getElementById('progress-text').textContent = filled + ' de ' + state.total + ' marcos llenos';
     document.getElementById('shutter-btn').disabled = filled >= state.total;
-    document.getElementById('toPdfBtn').disabled = filled < state.total;
+    document.getElementById('toPdfScreenBtn').disabled = filled < state.total;
   }
 
   document.getElementById('shutter-btn').addEventListener('click', () => {
@@ -381,7 +414,6 @@
     const video = document.getElementById('video');
     const cellAspect = state.photoW / state.photoH;
 
-    // recortamos el frame de video al mismo aspecto del marco (centrado)
     const vw = video.videoWidth;
     const vh = video.videoHeight;
     let cropW = vw, cropH = vw / cellAspect;
@@ -423,9 +455,149 @@
     });
   }
 
-  document.getElementById('toPdfBtn').addEventListener('click', () => {
-    // Aqui se conecta la funcion 3 (generar PDF) en el siguiente paso
-    alert('Todas las fotos listas. El siguiente paso genera el PDF con estas ' + photos.length + ' fotos.');
+  document.getElementById('toPdfScreenBtn').addEventListener('click', () => {
+    stopCamera();
+    showScreen('screen-pdf');
+    drawPdfPreview();
+  });
+
+  document.getElementById('backToCameraBtn').addEventListener('click', () => {
+    goToCamera();
+  });
+
+  /* ---------- PANTALLA 3: PDF ---------- */
+  document.getElementById('frameInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      frameImageDataUrl = reader.result;
+      document.getElementById('frame-status').textContent = 'Marco cargado: ' + file.name;
+      drawPdfPreview();
+    };
+    reader.readAsDataURL(file);
+  });
+
+  // dibuja un preview en canvas (a escala) que imita la hoja final
+  function drawPdfPreview() {
+    const canvas = document.getElementById('pdf-preview-canvas');
+    const ctx = canvas.getContext('2d');
+    const scale = 12; // px por cm
+    canvas.width = state.sheetW * scale;
+    canvas.height = state.sheetH * scale;
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const usableW = state.sheetW - (state.margin * 2);
+    const usableH = state.sheetH - (state.margin * 2);
+    const gridW = state.cols * state.photoW;
+    const gridH = state.rows * state.photoH;
+    const offsetX = state.margin + (usableW - gridW) / 2;
+    const offsetY = state.margin + (usableH - gridH) / 2;
+
+    let frameImg = null;
+    if (frameImageDataUrl) {
+      frameImg = new Image();
+      frameImg.src = frameImageDataUrl;
+    }
+
+    let loaded = 0;
+    const total = photos.length;
+    if (total === 0) { finishDraw(); return; }
+
+    photos.forEach((p, i) => {
+      const img = new Image();
+      img.onload = () => { drawOne(i, img); loaded++; if (loaded === total) finishDraw(); };
+      img.src = p;
+    });
+
+    function drawOne(i, img) {
+      const col = i % state.cols;
+      const row = Math.floor(i / state.cols);
+      const x = (offsetX + col * state.photoW) * scale;
+      const y = (offsetY + row * state.photoH) * scale;
+      const w = state.photoW * scale;
+      const h = state.photoH * scale;
+      ctx.drawImage(img, x, y, w, h);
+      if (frameImg && frameImg.complete) ctx.drawImage(frameImg, x, y, w, h);
+
+      // linea de corte punteada alrededor de cada foto
+      ctx.save();
+      ctx.strokeStyle = '#999';
+      ctx.setLineDash([4, 3]);
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, w, h);
+      ctx.restore();
+    }
+
+    function finishDraw() {
+      if (frameImg && !frameImg.complete) {
+        frameImg.onload = () => { photos.forEach((p, i) => {}); drawPdfPreview(); };
+      }
+    }
+  }
+
+  function buildPdf() {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({
+      orientation: state.sheetW > state.sheetH ? 'landscape' : 'portrait',
+      unit: 'cm',
+      format: [state.sheetW, state.sheetH]
+    });
+
+    const usableW = state.sheetW - (state.margin * 2);
+    const usableH = state.sheetH - (state.margin * 2);
+    const gridW = state.cols * state.photoW;
+    const gridH = state.rows * state.photoH;
+    const offsetX = state.margin + (usableW - gridW) / 2;
+    const offsetY = state.margin + (usableH - gridH) / 2;
+
+    photos.forEach((p, i) => {
+      const col = i % state.cols;
+      const row = Math.floor(i / state.cols);
+      const x = offsetX + col * state.photoW;
+      const y = offsetY + row * state.photoH;
+      doc.addImage(p, 'JPEG', x, y, state.photoW, state.photoH);
+      if (frameImageDataUrl) {
+        doc.addImage(frameImageDataUrl, 'PNG', x, y, state.photoW, state.photoH);
+      }
+      // linea de corte punteada
+      doc.setDrawColor(150, 150, 150);
+      doc.setLineDashPattern([0.1, 0.1], 0);
+      doc.rect(x, y, state.photoW, state.photoH);
+    });
+
+    doc.setLineDashPattern([], 0);
+    doc.setFontSize(7);
+    doc.setTextColor(150, 150, 150);
+    doc.text('Imprimir a tamaño real (100%), sin ajustar a página', state.margin, state.sheetH - (state.margin / 2));
+
+    return doc;
+  }
+
+  document.getElementById('downloadBtn').addEventListener('click', () => {
+    const doc = buildPdf();
+    lastPdfFilename = 'marcofotos_' + Date.now() + '.pdf';
+    doc.save(lastPdfFilename);
+  });
+
+  document.getElementById('shareBtn').addEventListener('click', async () => {
+    const doc = buildPdf();
+    const blob = doc.output('blob');
+    lastPdfFilename = 'marcofotos_' + Date.now() + '.pdf';
+    const file = new File([blob], lastPdfFilename, { type: 'application/pdf' });
+
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: 'MARCOFOTOS', text: 'Aquí está tu hoja de fotos lista para imprimir' });
+      } catch (err) {
+        // usuario cancelo, no hacer nada
+      }
+    } else {
+      alert('Tu navegador no soporta compartir archivos directamente. Se descargará el PDF y podrás enviarlo por WhatsApp manualmente.');
+      doc.save(lastPdfFilename);
+    }
   });
 
   calcular();
