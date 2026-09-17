@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MARCOFOTOS</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, sans-serif;
+    background: #f4f3ee;
+    color: #2c2c2a;
+    margin: 0;
+    padding: 16px;
+  }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  p.subtitle { color: #5f5e5a; margin-top: 0; font-size: 14px; }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .card h2 { font-size: 15px; margin: 0 0 12px 0; }
+  .btn-group { display: flex; gap: 8px; }
+  .btn-option {
+    flex: 1;
+    padding: 12px;
+    border: 2px solid #d3d1c7;
+    border-radius: 8px;
+    text-align: center;
+    background: #fff;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .btn-option.selected {
+    border-color: #0f6e56;
+    background: #e1f5ee;
+    color: #085041;
+    font-weight: 600;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    color: #5f5e5a;
+    margin-bottom: 4px;
+  }
+  input[type="number"] {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #d3d1c7;
+    border-radius: 8px;
+    font-size: 16px;
+    margin-bottom: 12px;
+  }
+  .row { display: flex; gap: 12px; }
+  .row > div { flex: 1; }
+  .result {
+    background: #e1f5ee;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+    color: #085041;
+    margin-top: 8px;
+  }
+  .result strong { font-size: 18px; }
+  .warning {
+    background: #faeeda;
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 13px;
+    color: #633806;
+    margin-top: 8px;
+  }
+  #preview-wrap {
+    display: flex;
+    justify-content: center;
+    margin-top: 12px;
+  }
+  #sheet-preview {
+    background: #fff;
+    border: 1px solid #b4b2a9;
+    position: relative;
+  }
+  .cell {
+    position: absolute;
+    background: #cecbf6;
+    border: 1px solid #7f77dd;
+    border-radius: 2px;
+  }
+  button.primary {
+    width: 100%;
+    padding: 14px;
+    background: #0f6e56;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.primary:disabled {
+    background: #b4b2a9;
+    cursor: not-allowed;
+  }
+</style>
+</head>
+<body>
+
+<h1>MARCOFOTOS</h1>
+<p class="subtitle">Paso 1: elige el tamaño de hoja y de foto</p>
+
+<div class="card">
+  <h2>Tamaño de hoja</h2>
+  <div class="btn-group">
+    <div class="btn-option selected" data-sheet="A4" data-w="21" data-h="29.7">A4 (21 x 29.7 cm)</div>
+    <div class="btn-option" data-sheet="Carta" data-w="21.59" data-h="27.94">Carta (21.59 x 27.94 cm)</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Tamaño de foto (cm)</h2>
+  <div class="row">
+    <div>
+      <label for="photoW">Ancho</label>
+      <input type="number" id="photoW" value="5" min="1" step="0.1">
+    </div>
+    <div>
+      <label for="photoH">Alto</label>
+      <input type="number" id="photoH" value="5" min="1" step="0.1">
+    </div>
+  </div>
+  <label for="margin">Margen de impresión (cm, en cada borde)</label>
+  <input type="number" id="margin" value="0.5" min="0" step="0.1">
+</div>
+
+<div class="card">
+  <h2>Resultado</h2>
+  <div id="result" class="result">Calculando...</div>
+  <div id="warning-zero" class="warning" style="display:none;">
+    No cabe ninguna foto con esas medidas. Reduce el tamaño de foto o el margen.
+  </div>
+  <div id="preview-wrap">
+    <div id="sheet-preview"></div>
+  </div>
+</div>
+
+<button class="primary" id="continueBtn" disabled>Continuar a la cámara</button>
+
+<script>
+  const state = {
+    sheetW: 21,
+    sheetH: 29.7,
+    photoW: 5,
+    photoH: 5,
+    margin: 0.5
+  };
+
+  const PREVIEW_SCALE = 10; // px por cm en el preview
+
+  function calcular() {
+    const usableW = state.sheetW - (state.margin * 2);
+    const usableH = state.sheetH - (state.margin * 2);
+
+    const cols = Math.floor(usableW / state.photoW);
+    const rows = Math.floor(usableH / state.photoH);
+    const total = Math.max(cols, 0) * Math.max(rows, 0);
+
+    const resultEl = document.getElementById('result');
+    const warningEl = document.getElementById('warning-zero');
+    const continueBtn = document.getElementById('continueBtn');
+
+    if (total <= 0 || state.photoW <= 0 || state.photoH <= 0) {
+      resultEl.style.display = 'none';
+      warningEl.style.display = 'block';
+      continueBtn.disabled = true;
+      renderPreview(0, 0, usableW, usableH);
+      return;
+    }
+
+    resultEl.style.display = 'block';
+    warningEl.style.display = 'none';
+    continueBtn.disabled = false;
+
+    resultEl.innerHTML =
+      '<strong>' + total + ' foto(s)</strong> caben en la hoja<br>' +
+      cols + ' columna(s) x ' + rows + ' fila(s)';
+
+    renderPreview(cols, rows, usableW, usableH);
+  }
+
+  function renderPreview(cols, rows, usableW, usableH) {
+    const sheet = document.getElementById('sheet-preview');
+    sheet.innerHTML = '';
+    sheet.style.width = (state.sheetW * PREVIEW_SCALE) + 'px';
+    sheet.style.height = (state.sheetH * PREVIEW_SCALE) + 'px';
+
+    if (cols <= 0 || rows <= 0) return;
+
+    // centrar la cuadricula dentro del area util
+    const gridW = cols * state.photoW;
+    const gridH = rows * state.photoH;
+    const offsetX = state.margin + (usableW - gridW) / 2;
+    const offsetY = state.margin + (usableH - gridH) / 2;
+
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.style.left = ((offsetX + c * state.photoW) * PREVIEW_SCALE) + 'px';
+        cell.style.top = ((offsetY + r * state.photoH) * PREVIEW_SCALE) + 'px';
+        cell.style.width = (state.photoW * PREVIEW_SCALE) + 'px';
+        cell.style.height = (state.photoH * PREVIEW_SCALE) + 'px';
+        sheet.appendChild(cell);
+      }
+    }
+  }
+
+  // selector de hoja
+  document.querySelectorAll('.btn-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.btn-option').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      state.sheetW = parseFloat(btn.dataset.w);
+      state.sheetH = parseFloat(btn.dataset.h);
+      calcular();
+    });
+  });
+
+  // inputs
+  document.getElementById('photoW').addEventListener('input', e => {
+    state.photoW = parseFloat(e.target.value) || 0;
+    calcular();
+  });
+  document.getElementById('photoH').addEventListener('input', e => {
+    state.photoH = parseFloat(e.target.value) || 0;
+    calcular();
+  });
+  document.getElementById('margin').addEventListener('input', e => {
+    state.margin = parseFloat(e.target.value) || 0;
+    calcular();
+  });
+
+  document.getElementById('continueBtn').addEventListener('click', () => {
+    // Guardamos la configuracion para el siguiente paso (camara)
+    localStorage.setItem('marcofotos_config', JSON.stringify(state));
+    alert('Configuracion guardada. El siguiente paso (camara) se conecta aqui.');
+  });
+
+  calcular();
+</script>
+
+</body>
+</html>
