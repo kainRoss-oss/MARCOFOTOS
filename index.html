@@ -346,7 +346,11 @@
     renderThumbs();
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' } },
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 3840 },
+          height: { ideal: 2160 }
+        },
         audio: false
       });
       document.getElementById('video').srcObject = stream;
@@ -430,7 +434,7 @@
     const ctx = cap.getContext('2d');
     ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
-    photos[idx] = cap.toDataURL('image/jpeg', 0.92);
+    photos[idx] = cap.toDataURL('image/jpeg', 0.98);
     updateProgressText();
     renderThumbs();
   });
