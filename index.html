@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MARCOFOTOS</title>
+<title>MARCOFOTOS HD</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
   * { box-sizing: border-box; }
@@ -143,11 +143,6 @@
   /* ---- pantalla pdf ---- */
   #pdf-preview-wrap { display: flex; justify-content: center; margin-top: 8px; overflow-x: auto; }
   #pdf-preview-canvas { background: #fff; border: 1px solid #b4b2a9; }
-  .file-input-btn {
-    display: block; width: 100%; padding: 12px; text-align: center;
-    border: 1px dashed #b4b2a9; border-radius: 8px; font-size: 13px;
-    color: #5f5e5a; cursor: pointer; margin-bottom: 8px;
-  }
   #frame-status { font-size: 12px; color: #085041; margin-top: 4px; }
   #print-note {
     background: #faeeda; color: #633806; font-size: 12px;
@@ -157,7 +152,7 @@
 </head>
 <body>
 
-<!-- ===================== PANTALLA 1: CONFIGURACION ===================== -->
+<!-- PANTALLA 1: CONFIGURACION -->
 <div class="screen active" id="screen-config">
   <h1>MARCOFOTOS</h1>
   <p class="subtitle">Paso 1: elige el tamaño de hoja y de foto</p>
@@ -165,7 +160,7 @@
   <div class="card">
     <h2>Tamaño de hoja</h2>
     <div class="btn-group" id="sheet-options">
-      <div class="btn-option" data-sheet="Carta" data-w="21.59" data-h="27.94">Carta (21.59 x 27.94 cm)</div>
+      <div class="btn-option selected" data-sheet="Carta" data-w="21.59" data-h="27.94">Carta (21.59 x 27.94 cm)</div>
     </div>
   </div>
 
@@ -207,7 +202,7 @@
   <button class="primary" id="continueBtn" disabled>Continuar a la cámara</button>
 </div>
 
-<!-- ===================== PANTALLA 2: CAMARA ===================== -->
+<!-- PANTALLA 2: CAMARA -->
 <div class="screen" id="screen-camera">
   <h1>Tomar fotos</h1>
   <p class="subtitle" id="progress-text">0 de 0 marcos llenos</p>
@@ -230,7 +225,7 @@
   <button class="secondary" id="backBtn">Volver a configuración</button>
 </div>
 
-<!-- ===================== PANTALLA 3: PDF ===================== -->
+<!-- PANTALLA 3: PDF -->
 <div class="screen" id="screen-pdf">
   <h1>Preview del PDF</h1>
   <p class="subtitle">Revisa el acomodo antes de descargar</p>
@@ -249,7 +244,7 @@
 
 <script>
   const state = {
-    sheetW: 21, sheetH: 29.7,
+    sheetW: 21.59, sheetH: 27.94,
     photoW: 5, photoH: 5,
     margin: 0.5,
     cols: 0, rows: 0, total: 0
@@ -260,7 +255,6 @@
   let stream = null;
   let frameTopDataUrl = null;
   let frameBottomDataUrl = null;
-  let lastPdfBlob = null;
   let lastPdfFilename = 'marcofotos.pdf';
 
   /* ---------- PANTALLA 1: calculo ---------- */
@@ -333,30 +327,32 @@
     goToCamera();
   });
 
-  /* ---------- helpers de pantalla ---------- */
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById(id).classList.add('active');
   }
 
-  /* ---------- PANTALLA 2: camara ---------- */
+  /* ---------- PANTALLA 2: camara HD ---------- */
   async function goToCamera() {
     showScreen('screen-camera');
     updateProgressText();
     renderThumbs();
     try {
+      // Forzamos resolucion ultra alta o la maxima soportada por el dispositivo
       stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: 'environment' },
-          width: { ideal: 3840 },
-          height: { ideal: 2160 }
+          width: { min: 1280, ideal: 3840, max: 4096 },
+          height: { min: 720, ideal: 2160, max: 3072 }
         },
         audio: false
       });
-      document.getElementById('video').srcObject = stream;
+      const video = document.getElementById('video');
+      video.srcObject = stream;
+      await video.play();
       drawOverlayLoop();
     } catch (err) {
-      alert('No se pudo acceder a la cámara: ' + err.message + '\nRevisa que hayas dado permiso de cámara al sitio.');
+      alert('No se pudo acceder a la cámara en alta resolución: ' + err.message);
     }
   }
 
@@ -394,7 +390,7 @@
       const x = (w - cellW) / 2;
       const y = (h - cellH) / 2;
 
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.8)';
       ctx.fillStyle = 'rgba(255,255,255,0.15)';
       ctx.lineWidth = 2;
       ctx.fillRect(x, y, cellW, cellH);
@@ -414,6 +410,7 @@
     document.getElementById('toPdfScreenBtn').disabled = filled < state.total;
   }
 
+  /* Captura en alta definicion */
   document.getElementById('shutter-btn').addEventListener('click', () => {
     const idx = firstEmptyIndex();
     if (idx === -1) return;
@@ -421,8 +418,10 @@
     const video = document.getElementById('video');
     const cellAspect = state.photoW / state.photoH;
 
+    // Dimensiones REALES del stream de la cámara (no del elemento HTML)
     const vw = video.videoWidth;
     const vh = video.videoHeight;
+
     let cropW = vw, cropH = vw / cellAspect;
     if (cropH > vh) { cropH = vh; cropW = vh * cellAspect; }
     const cropX = (vw - cropW) / 2;
@@ -431,10 +430,15 @@
     const cap = document.getElementById('capture-canvas');
     cap.width = cropW;
     cap.height = cropH;
+
     const ctx = cap.getContext('2d');
+    // Activar suavizado de alta calidad para la reduccion/escalado
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
-    photos[idx] = cap.toDataURL('image/jpeg', 0.98);
+    // Mantenemos maxima calidad con JPEG 1.0 (Sin pérdida visual)
+    photos[idx] = cap.toDataURL('image/jpeg', 1.0);
     updateProgressText();
     renderThumbs();
   });
@@ -472,7 +476,7 @@
     goToCamera();
   });
 
-  /* ---------- PANTALLA 3: PDF ---------- */
+  /* ---------- PANTALLA 3: PDF HD ---------- */
   function fetchAsDataUrl(fileName) {
     return fetch(fileName)
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.blob(); })
@@ -505,7 +509,7 @@
         frameTopDataUrl = topUrl;
         frameBottomDataUrl = bottomUrl;
         if (!topUrl && !bottomUrl) {
-          document.getElementById('frame-status').textContent = 'No se pudo cargar ' + btn.textContent + '. Verifica los nombres de archivo en el repo.';
+          document.getElementById('frame-status').textContent = 'No se pudo cargar ' + btn.textContent + '.';
         } else {
           document.getElementById('frame-status').textContent = btn.textContent + ' listo ✓';
         }
@@ -513,11 +517,10 @@
     });
   });
 
-  // dibuja un preview en canvas (a escala) que imita la hoja final
   function drawPdfPreview() {
     const canvas = document.getElementById('pdf-preview-canvas');
     const ctx = canvas.getContext('2d');
-    const scale = 12; // px por cm
+    const scale = 20; // Mayor resolucion para la vista previa en pantalla
     canvas.width = state.sheetW * scale;
     canvas.height = state.sheetH * scale;
 
@@ -554,14 +557,14 @@
         const w = state.photoW * scale;
         const h = state.photoH * scale;
 
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(img, x, y, w, h);
 
-        // franja superior: se escala solo por ancho (mantiene su proporcion), pegada al borde de arriba
         if (topImg) {
           const th = w * (topImg.naturalHeight / topImg.naturalWidth);
           ctx.drawImage(topImg, x, y, w, th);
         }
-        // franja inferior: igual, pegada al borde de abajo
         if (bottomImg) {
           const bh = w * (bottomImg.naturalHeight / bottomImg.naturalWidth);
           ctx.drawImage(bottomImg, x, y + h - bh, w, bh);
@@ -591,7 +594,8 @@
     const doc = new jsPDF({
       orientation: state.sheetW > state.sheetH ? 'landscape' : 'portrait',
       unit: 'cm',
-      format: [state.sheetW, state.sheetH]
+      format: [state.sheetW, state.sheetH],
+      compress: false // Desactivar la compresión interna que baja nitidez a las imágenes
     });
 
     const usableW = state.sheetW - (state.margin * 2);
@@ -609,18 +613,19 @@
       const row = Math.floor(i / state.cols);
       const x = offsetX + col * state.photoW;
       const y = offsetY + row * state.photoH;
-      doc.addImage(p, 'JPEG', x, y, state.photoW, state.photoH);
+      
+      // Insercion directa usando compresion FAST para mantener nitidez original de pixeles
+      doc.addImage(p, 'JPEG', x, y, state.photoW, state.photoH, undefined, 'FAST');
 
       if (frameTopDataUrl && topDims) {
         const th = state.photoW * (topDims.h / topDims.w);
-        doc.addImage(frameTopDataUrl, 'PNG', x, y, state.photoW, th);
+        doc.addImage(frameTopDataUrl, 'PNG', x, y, state.photoW, th, undefined, 'FAST');
       }
       if (frameBottomDataUrl && bottomDims) {
         const bh = state.photoW * (bottomDims.h / bottomDims.w);
-        doc.addImage(frameBottomDataUrl, 'PNG', x, y + state.photoH - bh, state.photoW, bh);
+        doc.addImage(frameBottomDataUrl, 'PNG', x, y + state.photoH - bh, state.photoW, bh, undefined, 'FAST');
       }
 
-      // linea de corte punteada
       doc.setDrawColor(150, 150, 150);
       doc.setLineDashPattern([0.1, 0.1], 0);
       doc.rect(x, y, state.photoW, state.photoH);
@@ -649,11 +654,9 @@
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: 'MARCOFOTOS', text: 'Aquí está tu hoja de fotos lista para imprimir' });
-      } catch (err) {
-        // usuario cancelo, no hacer nada
-      }
+      } catch (err) { }
     } else {
-      alert('Tu navegador no soporta compartir archivos directamente. Se descargará el PDF y podrás enviarlo por WhatsApp manualmente.');
+      alert('Tu navegador no soporta compartir archivos directamente. Se descargará el PDF.');
       doc.save(lastPdfFilename);
     }
   });
